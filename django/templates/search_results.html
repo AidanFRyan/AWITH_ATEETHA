@@ -1,0 +1,9 @@
+<h1>Search Results</h1>
+
+<ul>
+    {% for item in query_list %}
+    <li>
+        <a href={{item.link}}>{{item.title}}</a> - {{item.price}}
+    </li>
+    {% endfor %}
+</ul>
