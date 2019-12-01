@@ -2,8 +2,6 @@ import praw
 import re
 import datetime
 import numpy
-# import plotly.offline as plot
-# import plotly.graph_objects as graph
 import nltk
 import mysql.connector as sql
 
@@ -36,17 +34,41 @@ def trimPrice(p):
             break
     return s
 
+def isSubsetofList(q, w):
+    if set([qw.lower() for qw in q]).issubset(set([ww.lower() for ww in w])):
+        return True
+    else:
+        return False
+
+def trimTitleSelling(title):
+    trimmedTitle = title
+    while("[H]" in trimmedTitle):
+        trimmedTitle = trimmedTitle[1:]
+    trimmedTitle = trimmedTitle[2:]
+    while("[W]" in trimmedTitle):
+        trimmedTitle = trimmedTitle[:-1]
+    trimmedTitle = trimmedTitle[:-2]
+    return trimmedTitle
+
 def isPrice(p):
     if p.isdigit():
         return True
     if p == '':
         return False
+    digFound = False
     for i in p:
         if not i.isdigit() and i != '.':
             return False
+        elif i.isdigit():
+            digFound = True
+        elif i == '.':
+            if not digFound:
+                return False
     return True
+
 add_query = ("INSERT IGNORE INTO Queries (qstr, postID, price) VALUES (%s, %s, %s)")
 add_post = ("INSERT IGNORE INTO Posts (id, title, date, username, url) VALUES (%s, %s, %s, %s, %s)")
+
 class Searcher():
     reddit = praw.Reddit(client_id='Q0cB-L4Ukm4a7g', client_secret='jjkxJyXsyqWbqUnwRu3nsw054t0', user_agent='thejankisinfinite', password='Guitarshredder1')
     db = sql.connect(host='localhost', user='pi', passwd='pi', database='tbase')
@@ -78,25 +100,20 @@ class Searcher():
                         if price[1] != "CD" or not price[0].isdigit():
                             continue
                         print([w for w,t in tagTitle])
-                        # print([w for w,t in tagged[:dLoc]])
                         print(tagged[:dLoc])
-                        # print(s.join([w for w,t in tagged[l:dLoc]]))
                         print("$" + str(price[0]))
     def queryDatabase(self, qw):
-        posts = []
+        # posts = []
         pids = []
         out = []
         for i in qw:
-            self.cx.execute("SELECT DISTINCT * FROM Queries WHERE qstr = \"" + i + '"')
-            for (q, pid, price) in self.cx:
-                if pid not in pids:
-                    posts.append({'pid': pid, 'price': price})
+            self.cx.execute("SELECT DISTINCT id, title, date, username, url, price FROM Queries, Posts WHERE qstr = \"" + i + '" AND Posts.id = Queries.postID')
+            for (pid, title, date, username, url, price) in self.cx:
+                if pid not in pids and isSubsetofList(qw, furtherSplit(nltk.word_tokenize(trimTitleSelling(title)))):
+                    out.append({'price': price, 'link': url, 'title': title, 'username': username, 'date': date})
                     pids.append(pid)
-        print(posts)
-        for pid in posts:
-            self.cx.execute("SELECT DISTINCT * FROM Posts WHERE id = \"" + pid['pid'] + '"')
-            for (id, title, date, username, url) in self.cx:
-                out.append({'price': pid['price'], 'link': url, 'title': title, 'username': username})
+        out.sort(key=lambda x: float(x['date']))
+        out.reverse()
         return out
         
     def searchFor(self, query=''):
@@ -104,7 +121,8 @@ class Searcher():
         qw = furtherSplit(nltk.word_tokenize(query))
         for i in self.hw.search(query=query):
             if '$' in i.selftext:
-                if i.link_flair_text == 'SELLING' and set([w.lower() for w in qw]).issubset(set([w.lower() for w in furtherSplit(nltk.word_tokenize(i.title))])):
+                trimmedTitle = trimTitleSelling(i.title)
+                if i.link_flair_text == 'SELLING' and isSubsetofList(qw, furtherSplit(nltk.word_tokenize(trimmedTitle))):
                     wors = furtherSplit(nltk.word_tokenize(i.selftext))
                     sents = nltk.pos_tag(wors)
                     if len([t for w,t in sents if t == '$']) >= 1:
@@ -114,11 +132,11 @@ class Searcher():
                         subWords = words
                         while '$' in subWords:
                             pos = subWords.index('$')
+                            if pos+1 == len(subWords):
+                                break
                             price = subWords[pos+1]
                             if isPrice(trimPrice(price)):
                                 prices.append((pos + (len(words) - len(subWords)), trimPrice(price)))
-                            else:
-                                print('bad price ' + trimPrice(price))
                             subWords = subWords[pos+1:]
                         if len(prices) > 1:
                             prevPos = 0
@@ -149,4 +167,3 @@ class Searcher():
             self.cx.execute(add_post, (l['id'], l['title'], l['date'], l['username'], l['link']))
         self.cx.execute("commit")
         return self.queryDatabase([w.lower() for w in qw])
-        # return lst

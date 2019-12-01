@@ -1,9 +1,35 @@
+<style>
+body {
+    background-color:slategrey;
+    color: white;
+    font-family: Verdana, Geneva, Tahoma, sans-serif;
+}
+a:link{
+    color:honeydew;
+}
+a:visited{
+    color:lemonchiffon;
+}
+footer{
+    display: block;
+    bottom: 0;
+    width: 100%;
+    text-align: center;
+    font-size:10px;
+}
+</style>
 <h1>Search Results</h1>
-
+<div style='height:50%;'>
+{{ plot|safe }}
+</div>
 <ul>
     {% for item in query_list %}
     <li>
-        <a href={{item.link}}>{{item.title}}</a> - {{item.price}}
+        <a href={{item.link}}>{{item.title}}</a> - ${{item.price}} 
     </li>
     {% endfor %}
 </ul>
+<footer>
+    <p>An Aidan Ryan Production</p>
+    <p>AWITH_ATEETHA</p>
+</footer
