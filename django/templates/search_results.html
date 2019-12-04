@@ -19,13 +19,31 @@ footer{
 }
 </style>
 <h1>Search Results</h1>
+<h3>
+    Query Substrings
+</h3>
+{% for item in query_list.tq %}
+{{item}}
+{% endfor %}
+<h3>Similar Query Substrings</h3>
+{% for item in query_list.r %}
+{{item}}
+{% endfor %}
 <div style='height:50%;'>
 {{ plot|safe }}
 </div>
 <ul>
-    {% for item in query_list %}
+    {% for item in query_list.q %}
     <li>
-        <a href={{item.link}}>{{item.title}}</a> - ${{item.price}} 
+    <form action="/confirmDelete/" method="POST">
+        {% csrf_token %}
+    <input type='hidden' name='qstr' value='{%for item in query_list.tq%}{{item}} {%endfor%}'>
+        <a href={{item.link}}>{{item.title}}</a> - ${{item.price}} - {{item.numT}} confirmed trades - 
+        <input type='text' name='correctedPrice'>
+        <input type="submit" name='correction' value="Update Price">
+        <input type='hidden' name='pid' value='{{item.pid}}'>
+        <input type="submit" name='deletion' value="Remove">
+</form>
     </li>
     {% endfor %}
 </ul>

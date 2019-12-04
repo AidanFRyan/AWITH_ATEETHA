@@ -4,6 +4,7 @@ import datetime
 import numpy
 import nltk
 import mysql.connector as sql
+import random
 
 def splitString(i):
     retval = []
@@ -68,6 +69,8 @@ def isPrice(p):
 
 add_query = ("INSERT IGNORE INTO Queries (qstr, postID, price) VALUES (%s, %s, %s)")
 add_post = ("INSERT IGNORE INTO Posts (id, title, date, username, url) VALUES (%s, %s, %s, %s, %s)")
+update_user = ("UPDATE Users SET numTrades=%s WHERE username=\"%s\";")
+add_user = ("INSERT IGNORE INTO Users(username, numTrades) VALUES(%s, %s);")
 
 class Searcher():
     reddit = praw.Reddit(client_id='Q0cB-L4Ukm4a7g', client_secret='jjkxJyXsyqWbqUnwRu3nsw054t0', user_agent='thejankisinfinite', password='Guitarshredder1')
@@ -87,7 +90,6 @@ class Searcher():
                     title = title[:-1]
                 title = title[:-2]
                 tagTitle = nltk.pos_tag(nltk.word_tokenize(title))
-                # print(tagTitle)
                 sents = nltk.sent_tokenize(i.selftext)
                 words = [nltk.word_tokenize(s) for s in sents]
                 ts = [nltk.pos_tag(word) for word in words]
@@ -102,19 +104,29 @@ class Searcher():
                         print([w for w,t in tagTitle])
                         print(tagged[:dLoc])
                         print("$" + str(price[0]))
+
     def queryDatabase(self, qw):
         # posts = []
         pids = []
         out = []
         for i in qw:
-            self.cx.execute("SELECT DISTINCT id, title, date, username, url, price FROM Queries, Posts WHERE qstr = \"" + i + '" AND Posts.id = Queries.postID')
-            for (pid, title, date, username, url, price) in self.cx:
+            self.cx.execute("SELECT DISTINCT id, title, date, Posts.username, url, price, numTrades FROM Queries, Posts, Users WHERE qstr = \"" + i + '" AND Posts.id=Queries.postID AND Users.username = Posts.username')
+            for (pid, title, date, username, url, price, numT) in self.cx:
                 if pid not in pids and isSubsetofList(qw, furtherSplit(nltk.word_tokenize(trimTitleSelling(title)))):
-                    out.append({'price': price, 'link': url, 'title': title, 'username': username, 'date': date})
+                    out.append({'price': price, 'link': url, 'title': title, 'username': username, 'date': date, 'pid': pid, 'numT': numT})
                     pids.append(pid)
         out.sort(key=lambda x: float(x['date']))
         out.reverse()
         return out
+    
+    def similarQueries(self, qw):
+        recommended = []
+        for i in qw:
+            self.cx.execute("SELECT DISTINCT qstr FROM Queries WHERE postID IN (SELECT postID FROM Queries WHERE qstr = \"" + i + "\")")
+            for (q) in self.cx:
+                if q[0] not in recommended and q[0] not in qw:
+                    recommended.append(q[0])
+        return recommended
         
     def searchFor(self, query=''):
         lst = []
@@ -159,11 +171,21 @@ class Searcher():
                             curPrice = prices[0][1]
                         else:
                             continue
-                        lst.append({'id': i.id, 'title': i.title, 'link': 'http://www.reddit.com'+i.permalink, 'date': i.created_utc, 'query_words': qw, 'price': curPrice, 'username': i.author.name})
+                        lst.append({'id': i.id, 'title': i.title, 'link': 'http://www.reddit.com'+i.permalink, 'date': i.created_utc, 'query_words': qw, 'price': curPrice, 'username': i.author.name, 'numT': random.randint(0,12)})
         for i in qw:
             for l in lst:
                 self.cx.execute(add_query, (i.lower(), l['id'], l['price']))
         for l in lst:
             self.cx.execute(add_post, (l['id'], l['title'], l['date'], l['username'], l['link']))
+            self.cx.execute(update_user, (l['numT'], l['username']))
+            self.cx.execute(add_user, (l['username'], l['numT']))
         self.cx.execute("commit")
-        return self.queryDatabase([w.lower() for w in qw])
+        return {'q': self.queryDatabase([w.lower() for w in qw]), 'r': self.similarQueries([w.lower() for w in qw]), 'tq': [w.lower() for w in qw]}
+
+    def removeFromQueries(self, pID, qw):
+        for i in qw:
+            self.cx.execute("DELETE FROM Queries WHERE postID = \"" + pID + '" AND qstr = "' + i + '"')
+    
+    def updateInQueries(self, pID, qw, price):
+        for i in qw:
+            self.cx.execute('UPDATE Queries SET price = ' + str(price) + ' WHERE postID = "' + pID + '" AND qstr = "' + i + '"')

@@ -18,7 +18,7 @@ footer{
 }
 </style>
 <h1>hardwareSearch</h1>
-<form action="" method="post">
+<form action="/search/" method="post">
     {% csrf_token %}
     {{ form }}<input type="submit" value="Search">
 </form>
